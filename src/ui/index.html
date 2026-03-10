@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0051c3">
+    <title>My Personal R2 Drive</title>
+    <style>/* CSS_INJECT */</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>R2 Drive</h1>
+        <button id="logoutBtn" class="btn-small btn-outline hidden">Logout</button>
+    </header>
+
+    <main>
+        <section id="authView" class="card">
+            <h2 class="mb-2">Secure Login</h2>
+            <p class="text-muted mb-2">Authenticate using your YubiKey or Access Token.</p>
+            <input type="password" id="authInput" placeholder="Tap YubiKey or enter token..." autocomplete="off">
+            <button id="loginBtn">Authenticate</button>
+            <div id="authFeedback" class="feedback mt-2 text-center"></div>
+        </section>
+
+        <section id="dashboardView" class="dashboard hidden">
+
+            <div class="card" style="align-self: start;">
+                <h2 class="mb-2">Upload File</h2>
+                <div id="dropZone" class="drop-zone">
+                    <p>Drag & Drop a file here</p>
+                    <span class="text-muted" style="font-size: 0.85rem;">or click to browse</span>
+                    <input type="file" id="fileInput">
+                </div>
+                <div id="selectedFileInfo" class="mb-2 hidden" style="font-size: 0.9rem; font-weight: 500;"></div>
+                <button id="uploadBtn" disabled>Upload File</button>
+                <div id="uploadFeedback" class="feedback mt-2 text-center"></div>
+            </div>
+
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center;" class="mb-2">
+                    <h2>My Files</h2>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="newFolderBtn" class="btn-small btn-outline" style="border: none; display: flex; align-items: center; gap: 6px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                <line x1="12" y1="11" x2="12" y2="17"></line>
+                                <line x1="9" y1="14" x2="15" y2="14"></line>
+                            </svg>
+                            New Folder
+                        </button>
+                        <button id="refreshBtn" class="btn-small btn-outline btn-icon" style="border: none;" title="Refresh">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="filesFeedback" class="feedback text-center"></div>
+                <ul id="fileList" class="file-list"></ul>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script>/* JS_INJECT */</script>
+</body>
+</html>

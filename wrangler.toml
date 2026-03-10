@@ -1,0 +1,21 @@
+name = "file-share"
+main = "src/index.js"
+compatibility_date = "2026-03-07"
+
+workers_dev = false
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "file-share"
+
+[vars]
+YUBICO_CLIENT_ID = 117884
+MAX_UPLOAD_SIZE_MB = 100
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html", "**/*.css", "**/*.client.js"]
