@@ -173,8 +173,14 @@ class UIManager {
 
     setFeedback(elementId, message, type = 'text') {
         const el = this.els[elementId];
-        el.innerHTML = message;
+        el.textContent = message;
         el.className = 'feedback mt-2 text-center ' + type;
+    }
+
+    setFeedbackLoading(elementId) {
+        const el = this.els[elementId];
+        el.innerHTML = '<div class="loader"></div>';
+        el.className = 'feedback mt-2 text-center text';
     }
 
     clearFeedback() {
@@ -223,8 +229,13 @@ class UIManager {
                     </svg>
                     <strong>Go Back</strong>
                 </span>
-                <span class="text-muted" style="font-size: 0.85rem;">/${currentPrefix}</span>
             `;
+            const prefixSpan = document.createElement('span');
+            prefixSpan.className = 'text-muted';
+            prefixSpan.style.fontSize = '0.85rem';
+            prefixSpan.textContent = `/${currentPrefix}`;
+            upLi.appendChild(prefixSpan);
+
             upLi.onclick = onNavigateUp;
             this.els.fileList.appendChild(upLi);
         }
@@ -399,8 +410,7 @@ class AppController {
         const cleanName = folderName.trim().replace(/\//g, '');
         if (!cleanName) return;
 
-        this.ui.setFeedback('filesFeedback', '<div class="loader"></div>', 'text');
-
+        this.ui.setFeedbackLoading('filesFeedback');
         try {
             await this.drive.createFolder(cleanName, this.currentPrefix);
             this.loadFiles();
@@ -443,7 +453,7 @@ class AppController {
     }
 
     async loadFiles() {
-        this.ui.setFeedback('filesFeedback', '<div class="loader"></div>', 'text');
+        this.ui.setFeedbackLoading('filesFeedback');
         this.ui.els.fileList.innerHTML = '';
 
         try {
