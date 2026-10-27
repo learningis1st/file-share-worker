@@ -33,25 +33,31 @@ export async function handleUpload(request, url, env) {
     }
 
     const storage = new StorageService(env.FILES);
-
     const MAX_SIZE = (env.MAX_UPLOAD_SIZE_MB || 100) * 1024 * 1024;
     const contentLength = request.headers.get('content-length');
 
-    if (!contentLength) {
-        if (request.body) request.body.cancel();
+    if (!contentLength || !/^\d+$/.test(contentLength.trim())) {
+        if (request.body) await request.body.cancel();
         return new Response('Length Required: Chunked encoding is not permitted.', { status: 411 });
     }
 
-    const parsedLength = parseInt(contentLength, 10);
-    if (isNaN(parsedLength) || parsedLength < 0 || parsedLength > MAX_SIZE) {
-        if (request.body) request.body.cancel();
+    const parsedLength = Number(contentLength.trim());
+    if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > MAX_SIZE) {
+        if (request.body) await request.body.cancel();
         return new Response('Payload Too Large', { status: 413 });
     }
 
     const contentType = request.headers.get('content-type') || 'application/octet-stream';
 
     try {
-        const result = await storage.upload(filename, request.body, {
+        let uploadBody = '';
+        if (parsedLength > 0 && request.body) {
+            const { readable, writable } = new FixedLengthStream(parsedLength);
+            request.body.pipeTo(writable).catch(() => {}); // Prevent unhandled rejection if stream aborts early
+            uploadBody = readable;
+        }
+
+        const result = await storage.upload(filename, uploadBody, {
             onlyIf: { etagDoesNotMatch: '*' },
             httpMetadata: { contentType }
         });
