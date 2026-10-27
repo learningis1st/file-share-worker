@@ -1,11 +1,49 @@
 import { createPresignedUrl, verifyPresignedUrl } from '../lib/session.js';
 import { StorageService } from '../services/storage-service.js';
 
+export function isValidObjectKey(key) {
+    if (typeof key !== 'string' || key.length === 0) return false;
+    const bytes = new TextEncoder().encode(key);
+    if (bytes.length > 1024) return false;
+
+    // Disallow control characters (ASCII 0-31 and 127)
+    if (/[\x00-\x1F\x7F]/.test(key)) return false;
+
+    // Disallow leading slashes
+    if (key.startsWith('/')) return false;
+
+    const isDir = key.endsWith('/');
+    const trimmed = isDir ? key.slice(0, -1) : key;
+    if (isDir && trimmed.length === 0) return false; // bare "/" is invalid
+
+    const segments = trimmed.split('/');
+    for (const seg of segments) {
+        if (!seg || seg === '.' || seg === '..') {
+            return false;
+        }
+    }
+    return true;
+}
+
+function createByteLimiterStream(maxBytes) {
+    let bytesRead = 0;
+    return new TransformStream({
+        transform(chunk, controller) {
+            bytesRead += chunk.byteLength || chunk.length;
+            if (bytesRead > maxBytes) {
+                controller.error(new Error('UPLOAD_SIZE_EXCEEDED'));
+                return;
+            }
+            controller.enqueue(chunk);
+        }
+    });
+}
+
 export async function handleUpload(request, url, env) {
     const filename = url.searchParams.get('name');
 
-    if (!filename) {
-        return new Response('Bad Request: Missing filename', { status: 400 });
+    if (!filename || !isValidObjectKey(filename)) {
+        return new Response('Bad Request: Invalid or missing filename', { status: 400 });
     }
 
     const storage = new StorageService(env.FILES);
@@ -19,22 +57,35 @@ export async function handleUpload(request, url, env) {
     }
 
     const parsedLength = parseInt(contentLength, 10);
-    if (isNaN(parsedLength) || parsedLength > MAX_SIZE) {
+    if (isNaN(parsedLength) || parsedLength < 0 || parsedLength > MAX_SIZE) {
         if (request.body) request.body.cancel();
         return new Response('Payload Too Large', { status: 413 });
     }
 
     const contentType = request.headers.get('content-type') || 'application/octet-stream';
-    const result = await storage.upload(filename, request.body, {
-        onlyIf: { etagDoesNotMatch: '*' },
-        httpMetadata: { contentType }
-    });
-
-    if (result === null) {
-        return new Response('Conflict: File already exists. Rename and try again.', { status: 409 });
+    let body = request.body;
+    if (body) {
+        body = body.pipeThrough(createByteLimiterStream(MAX_SIZE));
     }
 
-    return new Response('Success');
+    try {
+        const result = await storage.upload(filename, body, {
+            onlyIf: { etagDoesNotMatch: '*' },
+            httpMetadata: { contentType }
+        });
+
+        if (result === null) {
+            return new Response('Conflict: File already exists. Rename and try again.', { status: 409 });
+        }
+
+        return new Response('Success');
+    } catch (err) {
+        if (err?.message === 'UPLOAD_SIZE_EXCEEDED' || err?.cause?.message === 'UPLOAD_SIZE_EXCEEDED') {
+            return new Response('Payload Too Large', { status: 413 });
+        }
+        console.error('Upload error:', err);
+        return new Response('Internal Server Error', { status: 500 });
+    }
 }
 
 export async function handleList(url, env) {
@@ -60,7 +111,10 @@ export async function handleList(url, env) {
         truncated: listed.truncated,
         cursor: listed.cursor
     }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+            'Content-Type': 'application/json',
+            'Referrer-Policy': 'no-referrer'
+        }
     });
 }
 
@@ -72,6 +126,10 @@ export async function handleDelete(url, env) {
         decodedKey = decodeURIComponent(key);
     } catch (e) {
         return new Response('Bad Request: Malformed URL', { status: 400 });
+    }
+
+    if (!isValidObjectKey(decodedKey)) {
+        return new Response('Bad Request: Invalid object key', { status: 400 });
     }
 
     const storage = new StorageService(env.FILES);
@@ -92,7 +150,7 @@ export async function handleDelete(url, env) {
             if (listed.truncated) {
                 return new Response(JSON.stringify({ truncated: true, cursor: listed.cursor }), {
                     status: 206,
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json', 'Referrer-Policy': 'no-referrer' }
                 });
             }
 
@@ -114,13 +172,16 @@ export async function handleDelete(url, env) {
 
 export async function handleGeneratePresignedUrl(request, url, env) {
     const filename = url.searchParams.get('name');
-    if (!filename) {
-        return new Response('Bad Request: Missing filename', { status: 400 });
+    if (!filename || !isValidObjectKey(filename)) {
+        return new Response('Bad Request: Invalid or missing filename', { status: 400 });
     }
 
     const signature = await createPresignedUrl(env.SESSION_SECRET, filename);
     return new Response(JSON.stringify({ signature }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+            'Content-Type': 'application/json',
+            'Referrer-Policy': 'no-referrer'
+        }
     });
 }
 
@@ -153,12 +214,12 @@ export async function handleDownload(url, env) {
     object.writeHttpMetadata(headers);
     headers.set('etag', object.httpEtag);
 
-    const downloadName = fullPath.split('/').pop();
+    const downloadName = fullPath.split('/').pop() || 'file';
     const isInline = url.searchParams.get('inline') === 'true';
 
     const currentType = headers.get('Content-Type');
     if (isInline && (!currentType || currentType === 'application/octet-stream')) {
-        const ext = (downloadName?.split('.').pop() || '').toLowerCase();
+        const ext = (downloadName.split('.').pop() || '').toLowerCase();
 
         const mimeTypes = {
             // Documents & Text
@@ -207,13 +268,14 @@ export async function handleDownload(url, env) {
 
     const disposition = isInline ? 'inline' : 'attachment';
 
-    const safeFilename = downloadName.replace(/"/g, '\\"');
+    // Strip control characters, quotes, and backslashes from fallback filename
+    const safeFilename = downloadName.replace(/[\r\n"\\]/g, '_');
     headers.set('Content-Disposition', `${disposition}; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
 
-    if (isInline) {
-        headers.set('Content-Security-Policy', "default-src 'none'; sandbox;");
-        headers.set('X-Content-Type-Options', 'nosniff');
-    }
+    // Defense-in-depth: Unconditionally enforce sandboxing, nosniff, and no-referrer on downloads
+    headers.set('Content-Security-Policy', "default-src 'none'; sandbox;");
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('Referrer-Policy', 'no-referrer');
 
     return new Response(object.body, { headers });
 }

@@ -4,8 +4,8 @@ export async function requireAuth(request, env) {
     let token = null;
     const authHeader = request.headers.get('Authorization');
 
-    if (authHeader) {
-        token = authHeader.replace('Bearer ', '');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.slice(7).trim();
     }
 
     if (!token) {

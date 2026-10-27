@@ -5,6 +5,9 @@ import { timingSafeEqual, signHmacSha256 } from '../lib/crypto.js';
 const fallbackStrategy = {
     async authenticate(token, env) {
         if (env.FALLBACK_PASSWORD) {
+            if (typeof env.FALLBACK_PASSWORD !== 'string' || env.FALLBACK_PASSWORD.length < 16) {
+                console.warn('[SECURITY] FALLBACK_PASSWORD is short or weak (< 16 characters). Consider using a stronger passphrase.');
+            }
             const tokenHash = await signHmacSha256(token, env.SESSION_SECRET);
             const passHash = await signHmacSha256(env.FALLBACK_PASSWORD, env.SESSION_SECRET);
 

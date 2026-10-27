@@ -8,15 +8,17 @@ const appRouter = new Router();
 
 // Public Routes
 appRouter.add('GET', '/', async (req, url, env) => {
+    const nonce = crypto.randomUUID().replace(/-/g, '');
     const maxSizeBytes = (env.MAX_UPLOAD_SIZE_MB || 100) * 1024 * 1024;
-    const renderedHtml = getRenderedHtml({ MAX_UPLOAD_SIZE: maxSizeBytes });
+    const renderedHtml = getRenderedHtml({ MAX_UPLOAD_SIZE: maxSizeBytes, nonce });
 
     return new Response(renderedHtml, {
         headers: {
-            'Content-Type': 'text/html',
+            'Content-Type': 'text/html; charset=utf-8',
             'X-Content-Type-Options': 'nosniff',
             'X-Frame-Options': 'DENY',
-            'Content-Security-Policy': "default-src 'self' 'unsafe-inline';"
+            'Referrer-Policy': 'no-referrer',
+            'Content-Security-Policy': `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;`
         }
     });
 }, false);

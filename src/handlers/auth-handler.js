@@ -7,14 +7,20 @@ export async function handleAuth(request, env) {
         const { token } = await request.json();
 
         if (typeof token !== 'string' || !token) {
-            return new Response('Unauthorized', { status: 401 });
+            return new Response('Unauthorized', {
+                status: 401,
+                headers: { 'Referrer-Policy': 'no-referrer' }
+            });
         }
 
         const sessionToken = await authService.authenticate(token, env);
 
         if (sessionToken) {
             return new Response(JSON.stringify({ sessionToken }), {
-                headers: { 'Content-Type': 'application/json' }
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Referrer-Policy': 'no-referrer'
+                }
             });
         }
     } catch (e) {
@@ -23,5 +29,8 @@ export async function handleAuth(request, env) {
 
     // Add a 500ms delay before returning the failure to mitigate timing attacks
     await new Promise(resolve => setTimeout(resolve, 500));
-    return new Response('Unauthorized', { status: 401 });
+    return new Response('Unauthorized', {
+        status: 401,
+        headers: { 'Referrer-Policy': 'no-referrer' }
+    });
 }

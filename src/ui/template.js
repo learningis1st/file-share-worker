@@ -2,14 +2,16 @@ import htmlString from './index.html';
 import cssString from './style.css';
 import jsString from './app.client.js';
 
-export const HTML_CONTENT = htmlString
-    .replace('/* CSS_INJECT */', () => cssString)
-    .replace('/* JS_INJECT */', () => jsString);
-
 export function getRenderedHtml(config = {}) {
     const maxUploadSize = Number(config.MAX_UPLOAD_SIZE ?? 0);
-    return HTML_CONTENT.replace(
-        '<head>',
-        () => `<head>\n    <script>window.APP_CONFIG = { MAX_UPLOAD_SIZE: ${maxUploadSize} };</script>`
-    );
+    const nonce = config.nonce ? String(config.nonce) : '';
+    const nonceAttr = nonce ? `nonce="${nonce}"` : '';
+
+    const configScript = `<script ${nonceAttr}>window.APP_CONFIG = { MAX_UPLOAD_SIZE: ${maxUploadSize} };</script>`;
+    const appScript = `<script ${nonceAttr}>${jsString}</script>`;
+
+    return htmlString
+        .replace('/* CSS_INJECT */', () => cssString)
+        .replace('<head>', () => `<head>\n    ${configScript}`)
+        .replace('<script>/* JS_INJECT */</script>', () => appScript);
 }

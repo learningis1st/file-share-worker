@@ -73,8 +73,10 @@ class FileService {
 
     async delete(filename, cursor = null) {
         let nextCursor = cursor;
+        const MAX_DELETE_PAGES = 500;
+        let pageCount = 0;
 
-        while (true) {
+        while (pageCount < MAX_DELETE_PAGES) {
             let deleteUrl = '/delete/' + encodeURIComponent(filename);
             if (nextCursor) {
                 deleteUrl += '?cursor=' + encodeURIComponent(nextCursor);
@@ -89,6 +91,11 @@ class FileService {
             if (!(data?.truncated && data?.cursor)) return;
 
             nextCursor = data.cursor;
+            pageCount++;
+        }
+
+        if (pageCount >= MAX_DELETE_PAGES) {
+            throw new Error('Folder contains too many items to delete in a single operation. Please retry.');
         }
     }
 
@@ -213,7 +220,7 @@ class UIManager {
         }
     }
 
-    renderFileList(files, directories, currentPrefix, getFileIconSvg, onDownload, onDelete, onNavigate, onNavigateUp, onPreview) {
+    renderFileList(files, directories, currentPrefix, getFileIconSvg, onDownload, onDelete, onNavigate, onNavigateUp, onPreview, onLoadMore, hasMore) {
         this.els.fileList.innerHTML = '';
 
         if (currentPrefix) {
@@ -322,6 +329,21 @@ class UIManager {
                 this.els.fileList.appendChild(li);
             });
         }
+
+        if (hasMore) {
+            const moreLi = document.createElement('li');
+            moreLi.className = 'file-item';
+            moreLi.style.justifyContent = 'center';
+            moreLi.style.padding = '12px';
+
+            const moreBtn = document.createElement('button');
+            moreBtn.className = 'btn-small btn-outline';
+            moreBtn.textContent = 'Load More Files';
+            moreBtn.onclick = onLoadMore;
+
+            moreLi.appendChild(moreBtn);
+            this.els.fileList.appendChild(moreLi);
+        }
     }
 }
 
@@ -332,6 +354,9 @@ class AppController {
         this.ui = ui;
         this.selectedFile = null;
         this.currentPrefix = '';
+        this.allFiles = [];
+        this.allDirectories = [];
+        this.nextCursor = null;
         this.initEventListeners();
         this.checkAuthOnLoad();
     }
@@ -452,37 +477,36 @@ class AppController {
         }
     }
 
-    async loadFiles() {
-        this.ui.setFeedbackLoading('filesFeedback');
-        this.ui.els.fileList.innerHTML = '';
+    async loadFiles(isLoadMore = false) {
+        if (!isLoadMore) {
+            this.ui.setFeedbackLoading('filesFeedback');
+            this.ui.els.fileList.innerHTML = '';
+            this.allFiles = [];
+            this.allDirectories = [];
+            this.nextCursor = null;
+        }
 
         try {
-            let allFiles = [];
-            let allDirectories = [];
-            let hasMore = true;
-            let currentCursor = null;
+            const data = await this.drive.listFiles(this.currentPrefix, this.nextCursor);
 
-            while (hasMore) {
-                const data = await this.drive.listFiles(this.currentPrefix, currentCursor);
+            if (data.files) this.allFiles.push(...data.files);
+            if (data.directories) this.allDirectories.push(...data.directories);
 
-                if (data.files) allFiles.push(...data.files);
-                if (data.directories) allDirectories.push(...data.directories);
-
-                hasMore = data.truncated;
-                currentCursor = data.cursor;
-            }
+            this.nextCursor = data.truncated ? data.cursor : null;
 
             this.ui.clearFeedback();
             this.ui.renderFileList(
-                allFiles,
-                allDirectories,
+                this.allFiles,
+                this.allDirectories,
                 this.currentPrefix,
                 (filename) => FileIconHelper.getFileIconSvg(filename),
                 (filename) => this.handleDownload(filename),
                 (filename) => this.handleDelete(filename),
                 (dir) => this.navigateTo(dir),
                 () => this.navigateUp(),
-                (filename) => this.handlePreview(filename)
+                (filename) => this.handlePreview(filename),
+                () => this.loadFiles(true),
+                !!this.nextCursor
             );
         } catch (e) {
             this.handleError(e, 'filesFeedback');

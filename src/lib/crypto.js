@@ -1,3 +1,5 @@
+import { uint8ArrayToBinary } from './text-base64.js';
+
 export async function signHmacSha256(data, secret) {
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
@@ -8,7 +10,7 @@ export async function signHmacSha256(data, secret) {
         ["sign"]
     );
     const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
-    return btoa(String.fromCharCode(...new Uint8Array(signature)));
+    return btoa(uint8ArrayToBinary(new Uint8Array(signature)));
 }
 
 export function timingSafeEqual(a, b) {

@@ -1,4 +1,5 @@
 import { timingSafeEqual, base64ToBytes } from './crypto.js';
+import { uint8ArrayToBinary } from './text-base64.js';
 
 export async function verifyYubicoOTP(otp, clientId, secretKeyB64) {
     if (!clientId || !secretKeyB64 || !otp) {
@@ -33,7 +34,7 @@ async function generateYubicoSignature(params, secretKeyB64) {
     const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
     const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
 
-    return btoa(String.fromCharCode(...new Uint8Array(signature)));
+    return btoa(uint8ArrayToBinary(new Uint8Array(signature)));
 }
 
 function parseYubicoResponse(text) {
