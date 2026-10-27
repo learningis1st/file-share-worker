@@ -25,20 +25,6 @@ export function isValidObjectKey(key) {
     return true;
 }
 
-function createByteLimiterStream(maxBytes) {
-    let bytesRead = 0;
-    return new TransformStream({
-        transform(chunk, controller) {
-            bytesRead += chunk.byteLength || chunk.length;
-            if (bytesRead > maxBytes) {
-                controller.error(new Error('UPLOAD_SIZE_EXCEEDED'));
-                return;
-            }
-            controller.enqueue(chunk);
-        }
-    });
-}
-
 export async function handleUpload(request, url, env) {
     const filename = url.searchParams.get('name');
 
@@ -63,13 +49,9 @@ export async function handleUpload(request, url, env) {
     }
 
     const contentType = request.headers.get('content-type') || 'application/octet-stream';
-    let body = request.body;
-    if (body) {
-        body = body.pipeThrough(createByteLimiterStream(MAX_SIZE));
-    }
 
     try {
-        const result = await storage.upload(filename, body, {
+        const result = await storage.upload(filename, request.body, {
             onlyIf: { etagDoesNotMatch: '*' },
             httpMetadata: { contentType }
         });
@@ -80,9 +62,6 @@ export async function handleUpload(request, url, env) {
 
         return new Response('Success');
     } catch (err) {
-        if (err?.message === 'UPLOAD_SIZE_EXCEEDED' || err?.cause?.message === 'UPLOAD_SIZE_EXCEEDED') {
-            return new Response('Payload Too Large', { status: 413 });
-        }
         console.error('Upload error:', err);
         return new Response('Internal Server Error', { status: 500 });
     }
